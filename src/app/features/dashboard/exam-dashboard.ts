@@ -1,6 +1,8 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { ExamApi } from '../../core/exam-api';
 import { Exam, ExamEntry, ExamPayload, Student, StreamRow, StudentRow } from '../../core/models';
 import { StreamComparison } from '../streams/stream-comparison';
@@ -42,6 +44,9 @@ export class ExamDashboard implements OnInit {
   filteredRows: StudentRow[] = [];
   visibleRows: StudentRow[] = [];
 
+  private destroyRef = inject(DestroyRef);
+  private load?: Subscription;
+
   constructor(private api: ExamApi) {}
 
   ngOnInit(): void {
@@ -49,26 +54,32 @@ export class ExamDashboard implements OnInit {
   }
 
   loadExam(examId: number): void {
+    // Exams load at different speeds. An older request left running can land
+    // after the newer one and paint the wrong exam.
+    this.load?.unsubscribe();
     this.loading = true;
     this.failed = false;
-    this.api.load(examId).subscribe({
-      next: (payload: ExamPayload) => {
-        this.exams = payload.exams;
-        this.subjects = payload.subjects;
-        this.students = payload.students;
-        this.entries = payload.entries;
-        this.derive();
-        this.loading = false;
-      },
-      error: () => {
-        this.failed = true;
-        this.loading = false;
-      },
-    });
+    this.load = this.api
+      .load(examId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (payload: ExamPayload) => {
+          this.exams = payload.exams;
+          this.subjects = payload.subjects;
+          this.students = payload.students;
+          this.entries = payload.entries;
+          this.derive();
+          this.loading = false;
+        },
+        error: () => {
+          this.failed = true;
+          this.loading = false;
+        },
+      });
   }
 
   onExamChange(): void {
-    this.loadExam(Number(this.selectedExamId));
+    this.loadExam(this.selectedExamId);
   }
 
   // ------------------------------------------------------------------ derived data

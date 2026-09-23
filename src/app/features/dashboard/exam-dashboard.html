@@ -6,7 +6,7 @@
       Exam
       <select [(ngModel)]="selectedExamId" (ngModelChange)="onExamChange()">
         @for (exam of exams; track exam.id) {
-          <option [value]="exam.id">{{ exam.name }}</option>
+          <option [ngValue]="exam.id">{{ exam.name }}</option>
         }
       </select>
     </label>

@@ -44,6 +44,24 @@ The before count came from a temporary `spyOnProperty` on the `rows` getter. It 
 
 The cost of the fixed version is that anything that changes `search`, `streamFilter` or the sort must call `applyFilters()`. Today that is the two `ngModelChange` bindings and `sortBy`.
 
-## Still open
+## Wrong exam after switching (not in the ticket)
 
-Switching exam while 9001 is still loading (1,200 ms) can let that response land after 9002 (250 ms) and paint the wrong exam.
+`ExamApi` delays the Term 2 Opener (9001) by 1,200 ms and the Mid Term (9002) by 250 ms. `loadExam` subscribed each time and never kept the subscription. The page opens on 9001. If the user switches to 9002 while 9001 is still loading, 9002 paints first. Then 9001 lands and overwrites it, while the dropdown still says Mid Term. The Mid Term scored about 10 marks higher, so the numbers are visibly wrong but look plausible.
+
+While writing that test I found a second bug on the same path. The exam `<select>` used `[value]`, so `selectedExamId` held the string `"9002"` despite its `number` type. `onExamChange` converted it with `Number()`, but the Retry button passed it straight through. `ExamApi` filters entries with `===`, so retrying a failed Mid Term load showed 0 candidates.
+
+`exam-dashboard.load.spec.ts` uses a fake API with the same delays and the same strict filter, and drives time with `fakeAsync`. Both tests failed before the fix: 40 instead of 70 after the Opener landed, and 0 candidates after retry.
+
+What I changed:
+
+- `loadExam` keeps the current subscription and unsubscribes before starting the next load. `ExamApi` already cancels on unsubscribe: it clears the timer and ignores the fetch, so a stale response is dropped rather than just ignored.
+- `takeUntilDestroyed(this.destroyRef)` cancels a load still in flight when the dashboard is destroyed. I used it instead of `ngOnDestroy` because it ships with Angular and keeps cleanup next to the subscription. `loadExam` runs outside construction, so it needs the injected `DestroyRef`.
+- The exam options use `[ngValue]`, so `selectedExamId` stays a number for every caller. `onExamChange` no longer needs `Number()`.
+
+What I rejected:
+
+- **Checking the exam id inside `next` and discarding a mismatch.** It hides the symptom but leaves the old request running, and every handler, including `error`, has to remember the check.
+- **Moving the load onto a `Subject` with `switchMap`.** That is the idiomatic RxJS shape and it would be correct. It would restructure how the component loads data, and one kept subscription does the same job in fewer lines.
+- **Converting with `Number()` at each call site.** That is what the code already did in one place and missed in another. Fixing the value where the select writes it means no caller has to remember.
+
+
