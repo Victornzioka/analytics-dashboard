@@ -1,0 +1,95 @@
+<div class="dashboard">
+  <h1>Exam analysis</h1>
+
+  <div class="toolbar">
+    <label>
+      Exam
+      <select [(ngModel)]="selectedExamId" (ngModelChange)="onExamChange()">
+        @for (exam of exams; track exam.id) {
+          <option [value]="exam.id">{{ exam.name }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      Stream
+      <select [(ngModel)]="streamFilter">
+        @for (name of streamNames; track name) {
+          <option [value]="name">{{ name }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      Search
+      <input [(ngModel)]="search" placeholder="name or admission number" />
+    </label>
+  </div>
+
+  @if (loading) {
+    <div class="state">Loading exam…</div>
+  } @else if (failed) {
+    <div class="state">
+      <p>Could not load this exam.</p>
+      <button (click)="loadExam(selectedExamId)">Retry</button>
+    </div>
+  } @else {
+    <div class="summary">
+      <div class="tile">
+        <span class="label">Candidates</span>
+        <span class="value">{{ candidateCount }}</span>
+      </div>
+      <div class="tile">
+        <span class="label">School mean</span>
+        <span class="value">{{ schoolMean | number: '1.2-2' }}</span>
+      </div>
+      <div class="tile">
+        <span class="label">School grade</span>
+        <span class="value">{{ schoolGrade }}</span>
+      </div>
+      <div class="tile">
+        <span class="label">Showing</span>
+        <span class="value">{{ visibleRows.length }} of {{ filteredRows.length }}</span>
+      </div>
+    </div>
+
+    <app-stream-comparison [rows]="streamRows" />
+
+    <table>
+      <thead>
+        <tr>
+          <th (click)="sortBy('position')">Pos</th>
+          <th (click)="sortBy('name')">Name</th>
+          <th>Adm</th>
+          <th (click)="sortBy('stream')">Stream</th>
+          @for (subject of subjects; track subject) {
+            <th>{{ subject.substring(0, 4) }}</th>
+          }
+          <th (click)="sortBy('mean')">Mean</th>
+          <th>Grade</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of visibleRows; track $index) {
+          <tr>
+            <td>{{ row.position }}</td>
+            <td>{{ row.name }}</td>
+            <td>{{ row.admissionNumber }}</td>
+            <td>{{ row.stream }}</td>
+            @for (subject of subjects; track subject) {
+              <td>{{ scoreFor(row, subject) }}</td>
+            }
+            <td>{{ row.mean | number: '1.2-2' }}</td>
+            <td>{{ row.grade }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (filteredRows.length > visibleRows.length) {
+      <p class="muted">
+        Only the first 100 rows are shown. Narrow the search to see the rest.
+      </p>
+    }
+  }
+</div>
