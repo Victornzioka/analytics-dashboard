@@ -14,8 +14,36 @@ I rejected counting an absence as zero, and I rejected giving each stream an equ
 
 A student who sat nothing keeps mean 0, so the table does not show `NaN`. They stay in the candidate count.
 
-## What this change does not do
+## Why search lags
 
-Typing in the search box is still slow. `rows` is a getter, and a keystroke rebuilds every candidate from the entries more than once. That is the next change, and it needs a measurement before a fix.
+`rows`, `filteredRows`, `visibleRows`, `streamRows`, `schoolMean` and `streamNames` were getters. A getter runs its body on every read, and Angular reads every template binding on each change-detection pass, twice in development mode. Each read of `rows` grouped about 24,000 entries into 3,000 candidate rows, and the other getters read `rows` again. None of that output depends on the search text.
 
-Switching exam while 9001 is still loading (1,200 ms) can let that response land after 9002 (250 ms) and paint the wrong exam. Not part of this commit.
+How I measured it: `exam-dashboard.perf.spec.ts` loads the real `exam-results.json` (Term 2 Opener, 3,000 candidates), types into the search box and times the input event plus `detectChanges()`. That is 40 keystrokes: "wanjiku" letter by letter and then cleared, five times. It runs in headless Chrome in development mode, so the absolute numbers are higher than a production build. The before and after figures are comparable with each other.
+
+| | Rows rebuilt per keystroke | Median keystroke | Worst keystroke |
+|---|---|---|---|
+| Before | 18 | 40.3 ms | 45.8 ms |
+| After | 0 | 4.8 ms | 12.8 ms |
+
+The before count came from a temporary `spyOnProperty` on the `rows` getter. It cannot run against the fix because `rows` is no longer a getter. The spec keeps the test that holds the fix in place: a keystroke must leave `dash.rows` as the same array. It failed before the change.
+
+## What I changed for performance
+
+- `rows`, `streamRows`, `schoolMean` and `streamNames` are plain fields, built once when an exam loads. The calculations are unchanged; only when they run changed.
+- `filteredRows` and `visibleRows` are rebuilt in `applyFilters()`, which runs when the search text, stream filter or sort order changes. It filters and sorts 3,000 rows that are already built.
+- The table tracks rows by `studentId` instead of `$index`, so Angular reuses a student's row rather than rewriting cells when the order changes.
+- `streamNames` uses a `Set` instead of `includes` over all 3,000 students.
+
+`candidateCount` and `schoolGrade` stay getters. Each is one lookup.
+
+## What I rejected for performance
+
+- **Debouncing the search box.** It reduces how often the work runs, but each run still rebuilds every row, and the input would feel laggy in a different way.
+- **Signals and `computed()`.** They come with Angular 20, so they are not a new dependency, and they would keep the values correct without manual refreshing. They would also change every binding and field in the component. The ticket says not to rewrite the dashboard, and plain fields fix the measured cost with a smaller diff. This is the direction I would take if the component keeps growing.
+- **`OnPush` change detection.** It would cut how often bindings are checked, but the getters would still run on each check. It is also easier to get wrong with `ngModel`.
+
+The cost of the fixed version is that anything that changes `search`, `streamFilter` or the sort must call `applyFilters()`. Today that is the two `ngModelChange` bindings and `sortBy`.
+
+## Still open
+
+Switching exam while 9001 is still loading (1,200 ms) can let that response land after 9002 (250 ms) and paint the wrong exam.

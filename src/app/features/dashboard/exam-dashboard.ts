@@ -33,6 +33,15 @@ export class ExamDashboard implements OnInit {
   loading = false;
   failed = false;
 
+  // Derived once per exam load, then refiltered when search, stream or sort change.
+  // Change detection reads these on every keystroke, so they must not be getters.
+  rows: StudentRow[] = [];
+  streamRows: StreamRow[] = [];
+  schoolMean = 0;
+  streamNames: string[] = ['ALL'];
+  filteredRows: StudentRow[] = [];
+  visibleRows: StudentRow[] = [];
+
   constructor(private api: ExamApi) {}
 
   ngOnInit(): void {
@@ -48,6 +57,7 @@ export class ExamDashboard implements OnInit {
         this.subjects = payload.subjects;
         this.students = payload.students;
         this.entries = payload.entries;
+        this.derive();
         this.loading = false;
       },
       error: () => {
@@ -63,7 +73,20 @@ export class ExamDashboard implements OnInit {
 
   // ------------------------------------------------------------------ derived data
 
-  get rows(): StudentRow[] {
+  private derive(): void {
+    this.rows = this.buildRows();
+    this.streamRows = this.buildStreamRows();
+    this.schoolMean = this.buildSchoolMean();
+    this.streamNames = this.buildStreamNames();
+    this.applyFilters();
+  }
+
+  applyFilters(): void {
+    this.filteredRows = this.buildFilteredRows();
+    this.visibleRows = this.filteredRows.slice(0, 100);
+  }
+
+  private buildRows(): StudentRow[] {
     const byStudent = new Map<number, ExamEntry[]>();
     for (const entry of this.entries) {
       const list = byStudent.get(entry.studentId);
@@ -115,7 +138,7 @@ export class ExamDashboard implements OnInit {
     return rows;
   }
 
-  get filteredRows(): StudentRow[] {
+  private buildFilteredRows(): StudentRow[] {
     let out = this.rows;
 
     if (this.search.length >= 2) {
@@ -148,11 +171,7 @@ export class ExamDashboard implements OnInit {
     return out;
   }
 
-  get visibleRows(): StudentRow[] {
-    return this.filteredRows.slice(0, 100);
-  }
-
-  get streamRows(): StreamRow[] {
+  private buildStreamRows(): StreamRow[] {
     const byStream = new Map<string, StudentRow[]>();
     for (const row of this.rows) {
       const list = byStream.get(row.stream);
@@ -182,7 +201,7 @@ export class ExamDashboard implements OnInit {
     return out;
   }
 
-  get schoolMean(): number {
+  private buildSchoolMean(): number {
     const candidates = this.rows;
     if (candidates.length === 0) {
       return 0;
@@ -200,14 +219,12 @@ export class ExamDashboard implements OnInit {
     return this.gradeFor(this.schoolMean);
   }
 
-  get streamNames(): string[] {
-    const names = ['ALL'];
+  private buildStreamNames(): string[] {
+    const names = new Set<string>();
     for (const student of this.students) {
-      if (!names.includes(student.stream)) {
-        names.push(student.stream);
-      }
+      names.add(student.stream);
     }
-    return names;
+    return ['ALL', ...names];
   }
 
   get candidateCount(): number {
@@ -243,5 +260,6 @@ export class ExamDashboard implements OnInit {
       this.sortField = field;
       this.sortDir = 'asc';
     }
+    this.applyFilters();
   }
 }

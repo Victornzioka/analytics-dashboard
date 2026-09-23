@@ -13,7 +13,7 @@
 
     <label>
       Stream
-      <select [(ngModel)]="streamFilter">
+      <select [(ngModel)]="streamFilter" (ngModelChange)="applyFilters()">
         @for (name of streamNames; track name) {
           <option [value]="name">{{ name }}</option>
         }
@@ -22,7 +22,11 @@
 
     <label>
       Search
-      <input [(ngModel)]="search" placeholder="name or admission number" />
+      <input
+        [(ngModel)]="search"
+        (ngModelChange)="applyFilters()"
+        placeholder="name or admission number"
+      />
     </label>
   </div>
 
@@ -70,7 +74,7 @@
         </tr>
       </thead>
       <tbody>
-        @for (row of visibleRows; track $index) {
+        @for (row of visibleRows; track row.studentId) {
           <tr>
             <td>{{ row.position }}</td>
             <td>{{ row.name }}</td>
