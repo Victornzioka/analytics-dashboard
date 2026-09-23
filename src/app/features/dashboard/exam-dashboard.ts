@@ -83,14 +83,18 @@ export class ExamDashboard implements OnInit {
 
       const scores: Record<string, number | null> = {};
       let total = 0;
+      let sat = 0;
       for (const entry of studentEntries) {
         scores[entry.subject] = entry.score;
         if (entry.score !== null) {
           total = total + entry.score;
+          sat = sat + 1;
         }
       }
 
-      const mean = Math.round((total / this.subjects.length) * 100) / 100;
+      // An absence is a paper not sat. Counting it as zero made the on-screen
+      // mean lower than the printed slip.
+      const mean = sat === 0 ? 0 : Math.round((total / sat) * 100) / 100;
 
       rows.push({
         studentId: student.id,
@@ -179,15 +183,17 @@ export class ExamDashboard implements OnInit {
   }
 
   get schoolMean(): number {
-    const streams = this.streamRows;
-    if (streams.length === 0) {
+    const candidates = this.rows;
+    if (candidates.length === 0) {
       return 0;
     }
+    // Each candidate counts once. Averaging the stream means gives the
+    // smallest stream the same weight as the largest.
     let total = 0;
-    for (const s of streams) {
-      total = total + s.mean;
+    for (const row of candidates) {
+      total = total + row.mean;
     }
-    return Math.round((total / streams.length) * 100) / 100;
+    return Math.round((total / candidates.length) * 100) / 100;
   }
 
   get schoolGrade(): string {
